@@ -25,7 +25,7 @@ body {
 }
 
 .opis {
-    width: 50vh;
+    width: 35vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -42,7 +42,6 @@ body {
     text-align: center;
     margin: 0;
     font-size: 22px;
-    letter-spacing: .2px;
 }
 
 .naslov p {
@@ -61,7 +60,7 @@ button {
     border: 0;
     border-radius: 999px;
     padding: 10px 14px;
-    font-weight: 700;
+    font-weight: bold;
     cursor: pointer;
     background: #111827;
     color: #fff;
@@ -86,7 +85,7 @@ button {
 
 .zapis {
     padding: 8px 10px;
-    border-radius: 999px;
+    border-radius: 100px;
     background: rgba(255, 255, 255, .08);
     border: 1px solid rgba(255, 255, 255, .14);
     font-size: 14px;

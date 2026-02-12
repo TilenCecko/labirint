@@ -18,7 +18,6 @@ const ctx = canvas.getContext("2d");
 
 const hudBananas = document.getElementById("banane");
 const hudMoves = document.getElementById("koraki");
-const hudMsg = document.getElementById("msg");
 
 const btnNew = document.getElementById("nov");
 const btnSolve = document.getElementById("resi");
@@ -58,7 +57,6 @@ function inBounds(x, y) {
   return x >= 0 && y >= 0 && x < COLS && y < ROWS;
 }
 function key(x, y) { return `${x},${y}`; }
-function setMsg(t){ hudMsg.textContent = t; }
 function shuffle(a){
   for (let i=a.length-1;i>0;i--){
     const j = Math.floor(Math.random()*(i+1));
@@ -157,7 +155,6 @@ function collectIfBanana() {
       b.got = true;
       bananasGot++;
       updateHUD();
-      setMsg(`Pobrano! 🍌 (${bananasGot}/${bananas.length})`);
       return;
     }
   }
@@ -319,11 +316,19 @@ function tryMove(dx, dy) {
 
   if (player.x === end.x && player.y === end.y) {
     if (bananasGot === bananas.length) {
-      setMsg("🎉 Zmaga! Opica je pobrala vse banane!");
-      alert("🎉 Zmaga! Opica je pobrala vse banane! 🍌🐵");
+          Swal.fire({
+              title: 'Zmaga🎉',
+              text: 'Pobral si vse banane',
+              icon: 'success',
+              confirmButtonText: 'V redu'
+          });
     } else {
-      setMsg(`Najprej pobri vse banane! (${bananasGot}/${bananas.length})`);
-      alert(`Najprej pobri vse banane! (${bananasGot}/${bananas.length})`);
+          Swal.fire({
+              title: 'Napaka',
+              text: 'Naprej poberi vse banane',
+              icon: 'error',
+              confirmButtonText: 'V redu'
+          });
     }
   }
 
@@ -358,7 +363,6 @@ btnReset.addEventListener("click", () => {
   showSolution = false;
   solution = [];
   updateHUD();
-  setMsg("Resetirano. Gremo znova!");
   draw();
   gameEl.focus();
 });
@@ -413,3 +417,5 @@ window.addEventListener("resize", () => {
 });
 
 boot();
+
+
