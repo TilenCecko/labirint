@@ -3,11 +3,64 @@
 // =====================
 const COLS = 25;
 const ROWS = 25;
-const WALL = 1;
-const FLOOR = 0;
-
 const BANANA_COUNT = 6;
-const SHOW_GRID = false;
+
+const H_WALL_ROWS = [
+  "1111111111110111111111111",
+  "0111001100100001001110000",
+  "0001001111001011011100000",
+  "0100000101100101011010100",
+  "1110100011111110111111011",
+  "0000110100011100011110100",
+  "1011111001110110100000011",
+  "0001101001101111000010100",
+  "1111110110110011001101110",
+  "0111100001001000101000101",
+  "0011010010110110110011011",
+  "0110111000000101000000010",
+  "1000110011011010100101000",
+  "0101101100000101000010101",
+  "0111010001001011101101110",
+  "0010000110111001110111011",
+  "0100101011110100000001110",
+  "1000010111111011100011001",
+  "0000111001010101000101110",
+  "0111110110100100111011001",
+  "1111001001111011001000110",
+  "0000001000000100010101111",
+  "0010000111011010111010000",
+  "0100001101100111010111010",
+  "0000011111110011000100100",
+  "1111111111110111111111111",
+];
+
+const V_WALL_ROWS = [
+  "10000100100011000100010011",
+  "11001100010110101100011111",
+  "11101110010110100001011111",
+  "10011111100010101000010101",
+  "11010011001000011000000101",
+  "10100010110100010110111011",
+  "11100010100010001011011001",
+  "10010010010010100111010011",
+  "10000011010101101100110101",
+  "11000011101010110011010001",
+  "11001001111011001011101101",
+  "10111000101101010111011101",
+  "10110011010101010110110111",
+  "11000101101110100101101001",
+  "11001111010101100010010001",
+  "11011010100010110110100001",
+  "10111011000001101011100101",
+  "10111000100010010011010101",
+  "11010001011011010110100101",
+  "10000110101001010010110101",
+  "10110101110101011101010001",
+  "11101110101010101010010101",
+  "11011010010101000001001011",
+  "11111100100011000110010111",
+  "10101000000011001010101001",
+];
 
 // =====================
 // DOM
@@ -20,140 +73,95 @@ const hudBananas = document.getElementById("banane");
 const hudMoves = document.getElementById("koraki");
 
 const btnNew = document.getElementById("nov");
-const btnSolve = document.getElementById("resi");
 const btnReset = document.getElementById("reset");
 
 // =====================
 // Stanje igre
 // =====================
-let grid = [];
-let start = { x: 1, y: 1 };
-let end = { x: COLS - 2, y: ROWS - 2 };
+const hWalls = H_WALL_ROWS.map((row) => [...row].map((cell) => cell === "1"));
+const vWalls = V_WALL_ROWS.map((row) => [...row].map((cell) => cell === "1"));
+
+const start = { x: 12, y: 0 };
+const end = { x: 12, y: ROWS - 1 };
+
 let player = { ...start };
-let playerRender = { ...start }; // float coords for smooth movement
+let playerRender = { ...start };
 let playerTarget = { ...start };
 let moving = false;
-const MOVE_MS = 140; // trajanje enega koraka (ms)
+const MOVE_MS = 140;
 let bananas = [];
 let bananasGot = 0;
 let moves = 0;
 
-let solution = [];
-let showSolution = false;
-
-// canvas “logične” (CSS) dimenzije
 let cw = 720;
 let ch = 720;
 
-
-function redrawNow() {
-  // prisilni repaint canvasa v istem frame-u
-  ctx.save();
-  ctx.restore();
-  draw();
-}
-
-
 // =====================
-// Pomožne funkcije
+// Pomozne funkcije
 // =====================
 function inBounds(x, y) {
   return x >= 0 && y >= 0 && x < COLS && y < ROWS;
 }
-function key(x, y) { return `${x},${y}`; }
-function shuffle(a){
-  for (let i=a.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [a[i],a[j]]=[a[j],a[i]];
+
+function key(x, y) {
+  return `${x},${y}`;
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
 }
+
 function updateHUD() {
   hudBananas.textContent = `🍌 ${bananasGot}/${bananas.length}`;
   hudMoves.textContent = `Koraki: ${moves}`;
 }
 
+function hasWallBetween(x, y, dx, dy) {
+  if (dx === 1) return vWalls[y][x + 1];
+  if (dx === -1) return vWalls[y][x];
+  if (dy === 1) return hWalls[y + 1][x];
+  if (dy === -1) return hWalls[y][x];
+  return true;
+}
+
 // =====================
-// Generiranje labirinta (DFS carving)
+// Igra
 // =====================
-function generateMaze() {
-  grid = Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => WALL));
-
-  const visited = new Set();
-  const stack = [];
-
-  function carve(x, y) {
-    grid[y][x] = FLOOR;
-    visited.add(key(x,y));
-  }
-
-  function neighbors(x, y) {
-    const dirs = shuffle([
-      {dx: 2, dy: 0},
-      {dx:-2, dy: 0},
-      {dx: 0, dy: 2},
-      {dx: 0, dy:-2},
-    ]);
-    const res = [];
-    for (const d of dirs) {
-      const nx = x + d.dx, ny = y + d.dy;
-      if (inBounds(nx, ny) && nx % 2 === 1 && ny % 2 === 1 && !visited.has(key(nx,ny))) {
-        res.push({nx, ny, wx: x + d.dx/2, wy: y + d.dy/2});
-      }
-    }
-    return res;
-  }
-
-  carve(1,1);
-  stack.push({x:1,y:1});
-
-  while (stack.length) {
-    const cur = stack[stack.length - 1];
-    const nbs = neighbors(cur.x, cur.y);
-    if (nbs.length === 0) { stack.pop(); continue; }
-    const pick = nbs[0];
-    grid[pick.wy][pick.wx] = FLOOR;
-    carve(pick.nx, pick.ny);
-    stack.push({x: pick.nx, y: pick.ny});
-  }
-
-  start = { x: 1, y: 1 };
-  end = { x: COLS - 2, y: ROWS - 2 };
-  grid[start.y][start.x] = FLOOR;
-  grid[end.y][end.x] = FLOOR;
-
+function resetPlayerState() {
   player = { ...start };
   playerRender = { ...start };
   playerTarget = { ...start };
   moving = false;
   moves = 0;
-  showSolution = false;
-  solution = [];
+}
 
+function newGame() {
+  resetPlayerState();
   spawnBananas(BANANA_COUNT);
   bananasGot = 0;
-
   updateHUD();
 }
 
-// =====================
-// Banane
-// =====================
 function spawnBananas(count) {
   bananas = [];
-  const taken = new Set([key(start.x,start.y), key(end.x,end.y)]);
-  let tries = 0;
+  const taken = new Set([key(start.x, start.y), key(end.x, end.y)]);
 
-  while (bananas.length < count && tries < 50000) {
-    tries++;
-    const x = 1 + Math.floor(Math.random() * (COLS - 2));
-    const y = 1 + Math.floor(Math.random() * (ROWS - 2));
-    if (grid[y][x] === WALL) continue;
-    const k = key(x,y);
-    if (taken.has(k)) continue;
-    taken.add(k);
-    bananas.push({ x, y, got: false });
+  const cells = [];
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      const cellKey = key(x, y);
+      if (!taken.has(cellKey)) {
+        cells.push({ x, y });
+      }
+    }
   }
+
+  shuffle(cells);
+  bananas = cells.slice(0, count).map(({ x, y }) => ({ x, y, got: false }));
 }
 
 function collectIfBanana() {
@@ -168,138 +176,670 @@ function collectIfBanana() {
 }
 
 // =====================
-// BFS rešitev
+// Render
 // =====================
-function bfs(from, to) {
-  const W = COLS, H = ROWS;
-  const N = W * H;
+function drawWalls(cell, offsetX, offsetY) {
+  const scale = cell / 16;
 
-  const idx = (x, y) => y * W + x;
-
-  const startI = idx(from.x, from.y);
-  const goalI  = idx(to.x, to.y);
-
-  // -1 pomeni "ni prejšnjega"
-  const prev = new Int32Array(N);
-  prev.fill(-1);
-
-  const seen = new Uint8Array(N);
-
-  // queue (max N)
-  const q = new Int32Array(N);
-  let head = 0, tail = 0;
-
-  seen[startI] = 1;
-  q[tail++] = startI;
-
-  while (head < tail) {
-    const cur = q[head++];
-    if (cur === goalI) break;
-
-    const x = cur % W;
-    const y = (cur / W) | 0;
-
-    // 4 smeri
-    // desno
-    if (x + 1 < W && grid[y][x + 1] !== WALL) {
-      const ni = cur + 1;
-      if (!seen[ni]) { seen[ni] = 1; prev[ni] = cur; q[tail++] = ni; }
-    }
-    // levo
-    if (x - 1 >= 0 && grid[y][x - 1] !== WALL) {
-      const ni = cur - 1;
-      if (!seen[ni]) { seen[ni] = 1; prev[ni] = cur; q[tail++] = ni; }
-    }
-    // dol
-    if (y + 1 < H && grid[y + 1][x] !== WALL) {
-      const ni = cur + W;
-      if (!seen[ni]) { seen[ni] = 1; prev[ni] = cur; q[tail++] = ni; }
-    }
-    // gor
-    if (y - 1 >= 0 && grid[y - 1][x] !== WALL) {
-      const ni = cur - W;
-      if (!seen[ni]) { seen[ni] = 1; prev[ni] = cur; q[tail++] = ni; }
-    }
-  }
-
-  if (!seen[goalI]) return [];
-
-  // reconstruct (brez split)
-  const path = [];
-  let cur = goalI;
-  while (cur !== -1) {
-    const x = cur % W;
-    const y = (cur / W) | 0;
-    path.push({ x, y });
-    if (cur === startI) break;
-    cur = prev[cur];
-  }
-  path.reverse();
-  return path;
+  ctx.save();
+  ctx.translate(offsetX - 2 * scale, offsetY - 2 * scale);
+  ctx.scale(scale, scale);
+  ctx.strokeStyle = "rgba(12, 24, 18, 0.98)";
+  ctx.lineWidth = 2;
+  ctx.lineCap = "square";
+  ctx.beginPath();
+  ctx.moveTo(2, 2);
+  ctx.lineTo(194, 2);
+  ctx.moveTo(210, 2);
+  ctx.lineTo(402, 2);
+  ctx.moveTo(18, 18);
+  ctx.lineTo(66, 18);
+  ctx.moveTo(98, 18);
+  ctx.lineTo(130, 18);
+  ctx.moveTo(162, 18);
+  ctx.lineTo(178, 18);
+  ctx.moveTo(242, 18);
+  ctx.lineTo(258, 18);
+  ctx.moveTo(290, 18);
+  ctx.lineTo(338, 18);
+  ctx.moveTo(50, 34);
+  ctx.lineTo(66, 34);
+  ctx.moveTo(98, 34);
+  ctx.lineTo(162, 34);
+  ctx.moveTo(194, 34);
+  ctx.lineTo(210, 34);
+  ctx.moveTo(226, 34);
+  ctx.lineTo(258, 34);
+  ctx.moveTo(274, 34);
+  ctx.lineTo(322, 34);
+  ctx.moveTo(18, 50);
+  ctx.lineTo(34, 50);
+  ctx.moveTo(114, 50);
+  ctx.lineTo(130, 50);
+  ctx.moveTo(146, 50);
+  ctx.lineTo(178, 50);
+  ctx.moveTo(210, 50);
+  ctx.lineTo(226, 50);
+  ctx.moveTo(242, 50);
+  ctx.lineTo(258, 50);
+  ctx.moveTo(274, 50);
+  ctx.lineTo(306, 50);
+  ctx.moveTo(322, 50);
+  ctx.lineTo(338, 50);
+  ctx.moveTo(354, 50);
+  ctx.lineTo(370, 50);
+  ctx.moveTo(2, 66);
+  ctx.lineTo(50, 66);
+  ctx.moveTo(66, 66);
+  ctx.lineTo(82, 66);
+  ctx.moveTo(130, 66);
+  ctx.lineTo(242, 66);
+  ctx.moveTo(258, 66);
+  ctx.lineTo(354, 66);
+  ctx.moveTo(370, 66);
+  ctx.lineTo(402, 66);
+  ctx.moveTo(66, 82);
+  ctx.lineTo(98, 82);
+  ctx.moveTo(114, 82);
+  ctx.lineTo(130, 82);
+  ctx.moveTo(178, 82);
+  ctx.lineTo(226, 82);
+  ctx.moveTo(274, 82);
+  ctx.lineTo(338, 82);
+  ctx.moveTo(354, 82);
+  ctx.lineTo(370, 82);
+  ctx.moveTo(2, 98);
+  ctx.lineTo(18, 98);
+  ctx.moveTo(34, 98);
+  ctx.lineTo(114, 98);
+  ctx.moveTo(146, 98);
+  ctx.lineTo(194, 98);
+  ctx.moveTo(210, 98);
+  ctx.lineTo(242, 98);
+  ctx.moveTo(258, 98);
+  ctx.lineTo(274, 98);
+  ctx.moveTo(370, 98);
+  ctx.lineTo(402, 98);
+  ctx.moveTo(50, 114);
+  ctx.lineTo(82, 114);
+  ctx.moveTo(98, 114);
+  ctx.lineTo(114, 114);
+  ctx.moveTo(146, 114);
+  ctx.lineTo(178, 114);
+  ctx.moveTo(194, 114);
+  ctx.lineTo(258, 114);
+  ctx.moveTo(322, 114);
+  ctx.lineTo(338, 114);
+  ctx.moveTo(354, 114);
+  ctx.lineTo(370, 114);
+  ctx.moveTo(2, 130);
+  ctx.lineTo(98, 130);
+  ctx.moveTo(114, 130);
+  ctx.lineTo(146, 130);
+  ctx.moveTo(162, 130);
+  ctx.lineTo(194, 130);
+  ctx.moveTo(226, 130);
+  ctx.lineTo(258, 130);
+  ctx.moveTo(290, 130);
+  ctx.lineTo(322, 130);
+  ctx.moveTo(338, 130);
+  ctx.lineTo(386, 130);
+  ctx.moveTo(18, 146);
+  ctx.lineTo(82, 146);
+  ctx.moveTo(146, 146);
+  ctx.lineTo(162, 146);
+  ctx.moveTo(194, 146);
+  ctx.lineTo(210, 146);
+  ctx.moveTo(258, 146);
+  ctx.lineTo(274, 146);
+  ctx.moveTo(290, 146);
+  ctx.lineTo(306, 146);
+  ctx.moveTo(354, 146);
+  ctx.lineTo(370, 146);
+  ctx.moveTo(386, 146);
+  ctx.lineTo(402, 146);
+  ctx.moveTo(34, 162);
+  ctx.lineTo(66, 162);
+  ctx.moveTo(82, 162);
+  ctx.lineTo(98, 162);
+  ctx.moveTo(130, 162);
+  ctx.lineTo(146, 162);
+  ctx.moveTo(162, 162);
+  ctx.lineTo(194, 162);
+  ctx.moveTo(210, 162);
+  ctx.lineTo(242, 162);
+  ctx.moveTo(258, 162);
+  ctx.lineTo(290, 162);
+  ctx.moveTo(322, 162);
+  ctx.lineTo(354, 162);
+  ctx.moveTo(370, 162);
+  ctx.lineTo(402, 162);
+  ctx.moveTo(18, 178);
+  ctx.lineTo(50, 178);
+  ctx.moveTo(66, 178);
+  ctx.lineTo(114, 178);
+  ctx.moveTo(210, 178);
+  ctx.lineTo(226, 178);
+  ctx.moveTo(242, 178);
+  ctx.lineTo(258, 178);
+  ctx.moveTo(370, 178);
+  ctx.lineTo(386, 178);
+  ctx.moveTo(2, 194);
+  ctx.lineTo(18, 194);
+  ctx.moveTo(66, 194);
+  ctx.lineTo(98, 194);
+  ctx.moveTo(130, 194);
+  ctx.lineTo(162, 194);
+  ctx.moveTo(178, 194);
+  ctx.lineTo(210, 194);
+  ctx.moveTo(226, 194);
+  ctx.lineTo(242, 194);
+  ctx.moveTo(258, 194);
+  ctx.lineTo(274, 194);
+  ctx.moveTo(306, 194);
+  ctx.lineTo(322, 194);
+  ctx.moveTo(338, 194);
+  ctx.lineTo(354, 194);
+  ctx.moveTo(18, 210);
+  ctx.lineTo(34, 210);
+  ctx.moveTo(50, 210);
+  ctx.lineTo(82, 210);
+  ctx.moveTo(98, 210);
+  ctx.lineTo(130, 210);
+  ctx.moveTo(210, 210);
+  ctx.lineTo(226, 210);
+  ctx.moveTo(242, 210);
+  ctx.lineTo(258, 210);
+  ctx.moveTo(322, 210);
+  ctx.lineTo(338, 210);
+  ctx.moveTo(354, 210);
+  ctx.lineTo(370, 210);
+  ctx.moveTo(386, 210);
+  ctx.lineTo(402, 210);
+  ctx.moveTo(18, 226);
+  ctx.lineTo(66, 226);
+  ctx.moveTo(82, 226);
+  ctx.lineTo(98, 226);
+  ctx.moveTo(146, 226);
+  ctx.lineTo(162, 226);
+  ctx.moveTo(194, 226);
+  ctx.lineTo(210, 226);
+  ctx.moveTo(226, 226);
+  ctx.lineTo(274, 226);
+  ctx.moveTo(290, 226);
+  ctx.lineTo(322, 226);
+  ctx.moveTo(338, 226);
+  ctx.lineTo(386, 226);
+  ctx.moveTo(34, 242);
+  ctx.lineTo(50, 242);
+  ctx.moveTo(114, 242);
+  ctx.lineTo(146, 242);
+  ctx.moveTo(162, 242);
+  ctx.lineTo(210, 242);
+  ctx.moveTo(242, 242);
+  ctx.lineTo(290, 242);
+  ctx.moveTo(306, 242);
+  ctx.lineTo(354, 242);
+  ctx.moveTo(370, 242);
+  ctx.lineTo(402, 242);
+  ctx.moveTo(18, 258);
+  ctx.lineTo(34, 258);
+  ctx.moveTo(66, 258);
+  ctx.lineTo(82, 258);
+  ctx.moveTo(98, 258);
+  ctx.lineTo(114, 258);
+  ctx.moveTo(130, 258);
+  ctx.lineTo(194, 258);
+  ctx.moveTo(210, 258);
+  ctx.lineTo(226, 258);
+  ctx.moveTo(338, 258);
+  ctx.lineTo(386, 258);
+  ctx.moveTo(2, 274);
+  ctx.lineTo(18, 274);
+  ctx.moveTo(82, 274);
+  ctx.lineTo(98, 274);
+  ctx.moveTo(114, 274);
+  ctx.lineTo(210, 274);
+  ctx.moveTo(226, 274);
+  ctx.lineTo(274, 274);
+  ctx.moveTo(322, 274);
+  ctx.lineTo(354, 274);
+  ctx.moveTo(386, 274);
+  ctx.lineTo(402, 274);
+  ctx.moveTo(66, 290);
+  ctx.lineTo(114, 290);
+  ctx.moveTo(146, 290);
+  ctx.lineTo(162, 290);
+  ctx.moveTo(178, 290);
+  ctx.lineTo(194, 290);
+  ctx.moveTo(210, 290);
+  ctx.lineTo(226, 290);
+  ctx.moveTo(242, 290);
+  ctx.lineTo(258, 290);
+  ctx.moveTo(306, 290);
+  ctx.lineTo(322, 290);
+  ctx.moveTo(338, 290);
+  ctx.lineTo(386, 290);
+  ctx.moveTo(18, 306);
+  ctx.lineTo(98, 306);
+  ctx.moveTo(114, 306);
+  ctx.lineTo(146, 306);
+  ctx.moveTo(162, 306);
+  ctx.lineTo(178, 306);
+  ctx.moveTo(210, 306);
+  ctx.lineTo(226, 306);
+  ctx.moveTo(258, 306);
+  ctx.lineTo(306, 306);
+  ctx.moveTo(322, 306);
+  ctx.lineTo(354, 306);
+  ctx.moveTo(386, 306);
+  ctx.lineTo(402, 306);
+  ctx.moveTo(2, 322);
+  ctx.lineTo(66, 322);
+  ctx.moveTo(98, 322);
+  ctx.lineTo(114, 322);
+  ctx.moveTo(146, 322);
+  ctx.lineTo(210, 322);
+  ctx.moveTo(226, 322);
+  ctx.lineTo(258, 322);
+  ctx.moveTo(290, 322);
+  ctx.lineTo(306, 322);
+  ctx.moveTo(354, 322);
+  ctx.lineTo(386, 322);
+  ctx.moveTo(98, 338);
+  ctx.lineTo(114, 338);
+  ctx.moveTo(210, 338);
+  ctx.lineTo(226, 338);
+  ctx.moveTo(274, 338);
+  ctx.lineTo(290, 338);
+  ctx.moveTo(306, 338);
+  ctx.lineTo(322, 338);
+  ctx.moveTo(338, 338);
+  ctx.lineTo(402, 338);
+  ctx.moveTo(34, 354);
+  ctx.lineTo(50, 354);
+  ctx.moveTo(114, 354);
+  ctx.lineTo(162, 354);
+  ctx.moveTo(178, 354);
+  ctx.lineTo(210, 354);
+  ctx.moveTo(226, 354);
+  ctx.lineTo(242, 354);
+  ctx.moveTo(258, 354);
+  ctx.lineTo(306, 354);
+  ctx.moveTo(322, 354);
+  ctx.lineTo(338, 354);
+  ctx.moveTo(18, 370);
+  ctx.lineTo(34, 370);
+  ctx.moveTo(98, 370);
+  ctx.lineTo(130, 370);
+  ctx.moveTo(146, 370);
+  ctx.lineTo(178, 370);
+  ctx.moveTo(210, 370);
+  ctx.lineTo(258, 370);
+  ctx.moveTo(274, 370);
+  ctx.lineTo(290, 370);
+  ctx.moveTo(306, 370);
+  ctx.lineTo(354, 370);
+  ctx.moveTo(370, 370);
+  ctx.lineTo(386, 370);
+  ctx.moveTo(82, 386);
+  ctx.lineTo(194, 386);
+  ctx.moveTo(226, 386);
+  ctx.lineTo(258, 386);
+  ctx.moveTo(306, 386);
+  ctx.lineTo(322, 386);
+  ctx.moveTo(354, 386);
+  ctx.lineTo(370, 386);
+  ctx.moveTo(2, 402);
+  ctx.lineTo(194, 402);
+  ctx.moveTo(210, 402);
+  ctx.lineTo(402, 402);
+  ctx.moveTo(2, 2);
+  ctx.lineTo(2, 402);
+  ctx.moveTo(18, 18);
+  ctx.lineTo(18, 50);
+  ctx.moveTo(18, 66);
+  ctx.lineTo(18, 82);
+  ctx.moveTo(18, 98);
+  ctx.lineTo(18, 114);
+  ctx.moveTo(18, 146);
+  ctx.lineTo(18, 178);
+  ctx.moveTo(18, 210);
+  ctx.lineTo(18, 258);
+  ctx.moveTo(18, 290);
+  ctx.lineTo(18, 306);
+  ctx.moveTo(18, 338);
+  ctx.lineTo(18, 386);
+  ctx.moveTo(34, 34);
+  ctx.lineTo(34, 50);
+  ctx.moveTo(34, 82);
+  ctx.lineTo(34, 114);
+  ctx.moveTo(34, 178);
+  ctx.lineTo(34, 210);
+  ctx.moveTo(34, 258);
+  ctx.lineTo(34, 290);
+  ctx.moveTo(34, 322);
+  ctx.lineTo(34, 354);
+  ctx.moveTo(34, 370);
+  ctx.lineTo(34, 402);
+  ctx.moveTo(50, 50);
+  ctx.lineTo(50, 82);
+  ctx.moveTo(50, 114);
+  ctx.lineTo(50, 130);
+  ctx.moveTo(50, 178);
+  ctx.lineTo(50, 210);
+  ctx.moveTo(50, 242);
+  ctx.lineTo(50, 306);
+  ctx.moveTo(50, 322);
+  ctx.lineTo(50, 338);
+  ctx.moveTo(50, 354);
+  ctx.lineTo(50, 386);
+  ctx.moveTo(66, 18);
+  ctx.lineTo(66, 66);
+  ctx.moveTo(66, 162);
+  ctx.lineTo(66, 194);
+  ctx.moveTo(66, 226);
+  ctx.lineTo(66, 290);
+  ctx.moveTo(66, 338);
+  ctx.lineTo(66, 402);
+  ctx.moveTo(82, 2);
+  ctx.lineTo(82, 66);
+  ctx.moveTo(82, 210);
+  ctx.lineTo(82, 242);
+  ctx.moveTo(82, 306);
+  ctx.lineTo(82, 354);
+  ctx.moveTo(82, 370);
+  ctx.lineTo(82, 386);
+  ctx.moveTo(98, 34);
+  ctx.lineTo(98, 162);
+  ctx.moveTo(98, 194);
+  ctx.lineTo(98, 210);
+  ctx.moveTo(98, 226);
+  ctx.lineTo(98, 274);
+  ctx.moveTo(98, 306);
+  ctx.lineTo(98, 322);
+  ctx.moveTo(98, 338);
+  ctx.lineTo(98, 370);
+  ctx.moveTo(114, 50);
+  ctx.lineTo(114, 82);
+  ctx.moveTo(114, 130);
+  ctx.lineTo(114, 178);
+  ctx.moveTo(114, 194);
+  ctx.lineTo(114, 242);
+  ctx.moveTo(114, 258);
+  ctx.lineTo(114, 274);
+  ctx.moveTo(114, 290);
+  ctx.lineTo(114, 306);
+  ctx.moveTo(114, 322);
+  ctx.lineTo(114, 338);
+  ctx.moveTo(130, 2);
+  ctx.lineTo(130, 18);
+  ctx.moveTo(130, 50);
+  ctx.lineTo(130, 66);
+  ctx.moveTo(130, 82);
+  ctx.lineTo(130, 114);
+  ctx.moveTo(130, 146);
+  ctx.lineTo(130, 194);
+  ctx.moveTo(130, 210);
+  ctx.lineTo(130, 226);
+  ctx.moveTo(130, 242);
+  ctx.lineTo(130, 258);
+  ctx.moveTo(130, 274);
+  ctx.lineTo(130, 290);
+  ctx.moveTo(130, 306);
+  ctx.lineTo(130, 354);
+  ctx.moveTo(130, 370);
+  ctx.lineTo(130, 386);
+  ctx.moveTo(146, 18);
+  ctx.lineTo(146, 50);
+  ctx.moveTo(146, 82);
+  ctx.lineTo(146, 98);
+  ctx.moveTo(146, 114);
+  ctx.lineTo(146, 146);
+  ctx.moveTo(146, 162);
+  ctx.lineTo(146, 178);
+  ctx.moveTo(146, 194);
+  ctx.lineTo(146, 210);
+  ctx.moveTo(146, 226);
+  ctx.lineTo(146, 242);
+  ctx.moveTo(146, 290);
+  ctx.lineTo(146, 306);
+  ctx.moveTo(146, 322);
+  ctx.lineTo(146, 338);
+  ctx.moveTo(146, 354);
+  ctx.lineTo(146, 370);
+  ctx.moveTo(162, 66);
+  ctx.lineTo(162, 82);
+  ctx.moveTo(162, 146);
+  ctx.lineTo(162, 194);
+  ctx.moveTo(162, 210);
+  ctx.lineTo(162, 226);
+  ctx.moveTo(162, 290);
+  ctx.lineTo(162, 322);
+  ctx.moveTo(162, 338);
+  ctx.lineTo(162, 354);
+  ctx.moveTo(178, 18);
+  ctx.lineTo(178, 50);
+  ctx.moveTo(178, 82);
+  ctx.lineTo(178, 98);
+  ctx.moveTo(178, 130);
+  ctx.lineTo(178, 146);
+  ctx.moveTo(178, 178);
+  ctx.lineTo(178, 242);
+  ctx.moveTo(178, 322);
+  ctx.lineTo(178, 338);
+  ctx.moveTo(178, 354);
+  ctx.lineTo(178, 370);
+  ctx.moveTo(194, 2);
+  ctx.lineTo(194, 66);
+  ctx.moveTo(194, 98);
+  ctx.lineTo(194, 130);
+  ctx.moveTo(194, 146);
+  ctx.lineTo(194, 178);
+  ctx.moveTo(194, 210);
+  ctx.lineTo(194, 226);
+  ctx.moveTo(194, 242);
+  ctx.lineTo(194, 258);
+  ctx.moveTo(194, 274);
+  ctx.lineTo(194, 306);
+  ctx.moveTo(194, 338);
+  ctx.lineTo(194, 354);
+  ctx.moveTo(194, 370);
+  ctx.lineTo(194, 402);
+  ctx.moveTo(210, 2);
+  ctx.lineTo(210, 18);
+  ctx.moveTo(210, 130);
+  ctx.lineTo(210, 146);
+  ctx.moveTo(210, 162);
+  ctx.lineTo(210, 210);
+  ctx.moveTo(210, 226);
+  ctx.lineTo(210, 242);
+  ctx.moveTo(210, 258);
+  ctx.lineTo(210, 274);
+  ctx.moveTo(210, 290);
+  ctx.lineTo(210, 338);
+  ctx.moveTo(210, 354);
+  ctx.lineTo(210, 402);
+  ctx.moveTo(226, 18);
+  ctx.lineTo(226, 66);
+  ctx.moveTo(226, 114);
+  ctx.lineTo(226, 162);
+  ctx.moveTo(226, 210);
+  ctx.lineTo(226, 274);
+  ctx.moveTo(226, 338);
+  ctx.lineTo(226, 354);
+  ctx.moveTo(242, 66);
+  ctx.lineTo(242, 98);
+  ctx.moveTo(242, 146);
+  ctx.lineTo(242, 162);
+  ctx.moveTo(242, 178);
+  ctx.lineTo(242, 210);
+  ctx.moveTo(242, 242);
+  ctx.lineTo(242, 258);
+  ctx.moveTo(242, 274);
+  ctx.lineTo(242, 338);
+  ctx.moveTo(258, 18);
+  ctx.lineTo(258, 34);
+  ctx.moveTo(258, 50);
+  ctx.lineTo(258, 82);
+  ctx.moveTo(258, 98);
+  ctx.lineTo(258, 114);
+  ctx.moveTo(258, 130);
+  ctx.lineTo(258, 146);
+  ctx.moveTo(258, 162);
+  ctx.lineTo(258, 178);
+  ctx.moveTo(258, 258);
+  ctx.lineTo(258, 274);
+  ctx.moveTo(258, 322);
+  ctx.lineTo(258, 354);
+  ctx.moveTo(258, 386);
+  ctx.lineTo(258, 402);
+  ctx.moveTo(274, 2);
+  ctx.lineTo(274, 34);
+  ctx.moveTo(274, 82);
+  ctx.lineTo(274, 98);
+  ctx.moveTo(274, 114);
+  ctx.lineTo(274, 146);
+  ctx.moveTo(274, 178);
+  ctx.lineTo(274, 226);
+  ctx.moveTo(274, 242);
+  ctx.lineTo(274, 258);
+  ctx.moveTo(274, 290);
+  ctx.lineTo(274, 306);
+  ctx.moveTo(274, 322);
+  ctx.lineTo(274, 338);
+  ctx.moveTo(274, 370);
+  ctx.lineTo(274, 386);
+  ctx.moveTo(290, 82);
+  ctx.lineTo(290, 130);
+  ctx.moveTo(290, 146);
+  ctx.lineTo(290, 210);
+  ctx.moveTo(290, 226);
+  ctx.lineTo(290, 322);
+  ctx.moveTo(290, 338);
+  ctx.lineTo(290, 354);
+  ctx.moveTo(290, 370);
+  ctx.lineTo(290, 402);
+  ctx.moveTo(306, 34);
+  ctx.lineTo(306, 50);
+  ctx.moveTo(306, 98);
+  ctx.lineTo(306, 130);
+  ctx.moveTo(306, 146);
+  ctx.lineTo(306, 194);
+  ctx.moveTo(306, 210);
+  ctx.lineTo(306, 226);
+  ctx.moveTo(306, 258);
+  ctx.lineTo(306, 290);
+  ctx.moveTo(306, 322);
+  ctx.lineTo(306, 338);
+  ctx.moveTo(306, 354);
+  ctx.lineTo(306, 370);
+  ctx.moveTo(322, 82);
+  ctx.lineTo(322, 98);
+  ctx.moveTo(322, 130);
+  ctx.lineTo(322, 146);
+  ctx.moveTo(322, 162);
+  ctx.lineTo(322, 178);
+  ctx.moveTo(322, 194);
+  ctx.lineTo(322, 226);
+  ctx.moveTo(322, 242);
+  ctx.lineTo(322, 274);
+  ctx.moveTo(322, 290);
+  ctx.lineTo(322, 322);
+  ctx.moveTo(322, 386);
+  ctx.lineTo(322, 402);
+  ctx.moveTo(338, 2);
+  ctx.lineTo(338, 66);
+  ctx.moveTo(338, 82);
+  ctx.lineTo(338, 162);
+  ctx.moveTo(338, 178);
+  ctx.lineTo(338, 210);
+  ctx.moveTo(338, 226);
+  ctx.lineTo(338, 242);
+  ctx.moveTo(338, 274);
+  ctx.lineTo(338, 290);
+  ctx.moveTo(338, 306);
+  ctx.lineTo(338, 354);
+  ctx.moveTo(338, 370);
+  ctx.lineTo(338, 386);
+  ctx.moveTo(354, 18);
+  ctx.lineTo(354, 50);
+  ctx.moveTo(354, 82);
+  ctx.lineTo(354, 114);
+  ctx.moveTo(354, 162);
+  ctx.lineTo(354, 194);
+  ctx.moveTo(354, 210);
+  ctx.lineTo(354, 226);
+  ctx.moveTo(354, 354);
+  ctx.lineTo(354, 370);
+  ctx.moveTo(354, 386);
+  ctx.lineTo(354, 402);
+  ctx.moveTo(370, 18);
+  ctx.lineTo(370, 82);
+  ctx.moveTo(370, 130);
+  ctx.lineTo(370, 146);
+  ctx.moveTo(370, 162);
+  ctx.lineTo(370, 210);
+  ctx.moveTo(370, 258);
+  ctx.lineTo(370, 322);
+  ctx.moveTo(370, 338);
+  ctx.lineTo(370, 354);
+  ctx.moveTo(370, 370);
+  ctx.lineTo(370, 386);
+  ctx.moveTo(386, 2);
+  ctx.lineTo(386, 50);
+  ctx.moveTo(386, 82);
+  ctx.lineTo(386, 98);
+  ctx.moveTo(386, 114);
+  ctx.lineTo(386, 130);
+  ctx.moveTo(386, 194);
+  ctx.lineTo(386, 210);
+  ctx.moveTo(386, 354);
+  ctx.lineTo(386, 386);
+  ctx.moveTo(402, 2);
+  ctx.lineTo(402, 402);
+  ctx.stroke();
+  ctx.restore();
 }
 
-
-// =====================
-// Render (RIŠEMO V CSS DIMENZIJAH cw/ch)
-// =====================
 function draw() {
   const size = Math.min(cw, ch);
   const cell = size / COLS;
+  const mazeWidth = COLS * cell;
+  const mazeHeight = ROWS * cell;
+  const offsetX = (cw - mazeWidth) / 2;
+  const offsetY = (ch - mazeHeight) / 2;
 
   ctx.clearRect(0, 0, cw, ch);
 
-  // ozadje “plošče” da maze izstopa
-  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  const bg = ctx.createLinearGradient(0, 0, cw, ch);
+  bg.addColorStop(0, "rgba(9, 18, 13, 0.92)");
+  bg.addColorStop(1, "rgba(35, 67, 46, 0.88)");
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, cw, ch);
 
-  // maze
-  for (let y=0; y<ROWS; y++) {
-    for (let x=0; x<COLS; x++) {
-      const px = x*cell, py = y*cell;
+  ctx.fillStyle = "rgba(98, 149, 114, 0.16)";
+  ctx.fillRect(offsetX, offsetY, mazeWidth, mazeHeight);
 
-      if (grid[y][x] === WALL) {
-        ctx.fillStyle = "rgba(10, 30, 20, 0.95)";
-      } else {
-        ctx.fillStyle = "rgba(60, 150, 80, 0.22)";
-      }
-      ctx.fillRect(px, py, cell, cell);
+  ctx.fillStyle = "rgba(239, 68, 68, 0.32)";
+  ctx.fillRect(offsetX + end.x * cell, offsetY + end.y * cell, cell, cell);
 
-      if (SHOW_GRID) {
-        ctx.strokeStyle = "rgba(255,255,255,0.07)";
-        ctx.strokeRect(px, py, cell, cell);
-      }
-    }
-  }
+  drawWalls(cell, offsetX, offsetY);
 
-  // solution highlight
-  if (showSolution && solution.length) {
-    ctx.fillStyle = "rgba(250, 204, 21, 0.35)";
-    for (const p of solution) {
-      ctx.fillRect(p.x*cell, p.y*cell, cell, cell);
-    }
-  }
-
-  // target marker background
-  ctx.fillStyle = "rgba(239, 68, 68, 0.97)";
-  ctx.fillRect(end.x*cell, end.y*cell, cell, cell);
-
-  // bananas
   for (const b of bananas) {
-    if (b.got) continue;
-    drawEmoji("🍌", b.x, b.y, cell);
+    if (!b.got) {
+      drawEmoji("🍌", b.x, b.y, cell, offsetX, offsetY);
+    }
   }
 
-  // player
-  drawEmoji("🐵", playerRender.x, playerRender.y, cell);
-
-  // target emoji
-  drawEmoji("🎯", end.x, end.y, cell);
+  drawEmoji("🐵", playerRender.x, playerRender.y, cell, offsetX, offsetY);
+  drawEmoji("🎯", end.x, end.y, cell, offsetX, offsetY);
 }
 
-function drawEmoji(emoji, x, y, cell) {
-  const cxp = x*cell + cell/2;
-  const cyp = y*cell + cell/2;
-  ctx.font = `${Math.floor(cell*0.75)}px system-ui`;
+function drawEmoji(emoji, x, y, cell, offsetX, offsetY) {
+  const cxp = offsetX + x * cell + cell / 2;
+  const cyp = offsetY + y * cell + cell / 2;
+  ctx.font = `${Math.floor(cell * 0.7)}px system-ui`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#fff";
@@ -309,27 +849,27 @@ function drawEmoji(emoji, x, y, cell) {
 // =====================
 // Gameplay
 // =====================
+function showMessage(title, text, icon) {
+  if (typeof Swal !== "undefined") {
+    Swal.fire({ title, text, icon, confirmButtonText: "V redu" });
+    return;
+  }
+  window.alert(`${title}\n\n${text}`);
+}
+
 function checkWin() {
   if (player.x === end.x && player.y === end.y) {
     if (bananasGot === bananas.length) {
-      Swal.fire({
-        title: 'Zmaga🎉',
-        text: 'Pobral si vse banane',
-        icon: 'success',
-        confirmButtonText: 'V redu'
-      });
+      showMessage("Zmaga 🎉", "Pobral si vse banane.", "success");
     } else {
-      Swal.fire({
-        title: 'Napaka',
-        text: 'Naprej poberi vse banane',
-        icon: 'error',
-        confirmButtonText: 'V redu'
-      });
+      showMessage("Napaka", "Naprej poberi vse banane.", "error");
     }
   }
 }
 
-function easeOut(t){ return 1 - (1 - t) * (1 - t); }
+function easeOut(t) {
+  return 1 - (1 - t) * (1 - t);
+}
 
 function tryMove(dx, dy) {
   if (moving) return;
@@ -337,12 +877,13 @@ function tryMove(dx, dy) {
   const nx = player.x + dx;
   const ny = player.y + dy;
   if (!inBounds(nx, ny)) return;
-  if (grid[ny][nx] === WALL) return;
+  if (hasWallBetween(player.x, player.y, dx, dy)) return;
 
   moving = true;
   playerTarget = { x: nx, y: ny };
 
-  const fromX = player.x, fromY = player.y;
+  const fromX = player.x;
+  const fromY = player.y;
   const t0 = performance.now();
 
   function anim(t) {
@@ -356,17 +897,17 @@ function tryMove(dx, dy) {
 
     if (p < 1) {
       requestAnimationFrame(anim);
-    } else {
-      // finalize logical position + collect/win
-      player = { ...playerTarget };
-      playerRender = { ...playerTarget };
-      moves++;
-      updateHUD();
-      collectIfBanana();
-      checkWin();
-      moving = false;
-      draw();
+      return;
     }
+
+    player = { ...playerTarget };
+    playerRender = { ...playerTarget };
+    moves++;
+    updateHUD();
+    collectIfBanana();
+    checkWin();
+    moving = false;
+    draw();
   }
 
   requestAnimationFrame(anim);
@@ -377,45 +918,30 @@ function tryMove(dx, dy) {
 // =====================
 function onKey(e) {
   e.stopPropagation();
-  const keys = ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"];
+  const keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
   if (!keys.includes(e.key)) return;
   e.preventDefault();
 
-  if (e.key === "ArrowUp") tryMove(0,-1);
+  if (e.key === "ArrowUp") tryMove(0, -1);
   if (e.key === "ArrowDown") tryMove(0, 1);
-  if (e.key === "ArrowLeft") tryMove(-1,0);
+  if (e.key === "ArrowLeft") tryMove(-1, 0);
   if (e.key === "ArrowRight") tryMove(1, 0);
 }
 
 btnNew.addEventListener("click", () => {
-  generateMaze();
+  newGame();
   draw();
   gameEl.focus();
 });
 
 btnReset.addEventListener("click", () => {
-  player = { ...start };
-  playerRender = { ...start };
-  playerTarget = { ...start };
-  moving = false;
-  moves = 0;
+  resetPlayerState();
   bananasGot = 0;
-  bananas.forEach(b => b.got = false);
-  showSolution = false;
-  solution = [];
+  bananas.forEach((b) => {
+    b.got = false;
+  });
   updateHUD();
   draw();
-  gameEl.focus();
-});
-
-btnSolve.addEventListener("click", () => {
-  // toggle
-  showSolution = !showSolution;
-
-  if (showSolution) {
-    solution = bfs(player, end);
-  }
-  redrawNow();   // 🔥 TAKOJ izriše
   gameEl.focus();
 });
 
@@ -423,30 +949,24 @@ window.addEventListener("keydown", onKey);
 gameEl.addEventListener("click", () => gameEl.focus());
 
 // =====================
-// DPR / Resize FIX (tukaj je bistvo popravka)
+// DPR / Resize
 // =====================
 function fitCanvasToDisplay() {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
 
-  // CSS dimenzije (logične)
   cw = rect.width;
   ch = rect.height;
 
-  // notranje dimenzije (device px)
   canvas.width = Math.round(cw * dpr);
   canvas.height = Math.round(ch * dpr);
 
-  // rišemo v CSS koordinatah
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-// =====================
-// Start
-// =====================
 function boot() {
   fitCanvasToDisplay();
-  generateMaze();
+  newGame();
   draw();
   gameEl.focus();
 }
@@ -457,5 +977,3 @@ window.addEventListener("resize", () => {
 });
 
 boot();
-
-

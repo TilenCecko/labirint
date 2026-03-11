@@ -59,8 +59,9 @@ body {
 button {
     border: 0;
     border-radius: 999px;
-    padding: 10px 14px;
+    padding: 14px 22px;
     font-weight: bold;
+    font-size: 16px;
     cursor: pointer;
     background: #111827;
     color: #fff;
