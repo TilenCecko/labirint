@@ -9,7 +9,7 @@ body {
 }
 
 body {
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    font-family: system-ui;
     color: #fff;
     background: url("../img/ozadje.jpg") no-repeat center center fixed;
     background-size: cover;

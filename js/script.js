@@ -30,6 +30,10 @@ let grid = [];
 let start = { x: 1, y: 1 };
 let end = { x: COLS - 2, y: ROWS - 2 };
 let player = { ...start };
+let playerRender = { ...start }; // float coords for smooth movement
+let playerTarget = { ...start };
+let moving = false;
+const MOVE_MS = 140; // trajanje enega koraka (ms)
 let bananas = [];
 let bananasGot = 0;
 let moves = 0;
@@ -119,6 +123,9 @@ function generateMaze() {
   grid[end.y][end.x] = FLOOR;
 
   player = { ...start };
+  playerRender = { ...start };
+  playerTarget = { ...start };
+  moving = false;
   moves = 0;
   showSolution = false;
   solution = [];
@@ -283,7 +290,7 @@ function draw() {
   }
 
   // player
-  drawEmoji("🐵", player.x, player.y, cell);
+  drawEmoji("🐵", playerRender.x, playerRender.y, cell);
 
   // target emoji
   drawEmoji("🎯", end.x, end.y, cell);
@@ -302,37 +309,67 @@ function drawEmoji(emoji, x, y, cell) {
 // =====================
 // Gameplay
 // =====================
+function checkWin() {
+  if (player.x === end.x && player.y === end.y) {
+    if (bananasGot === bananas.length) {
+      Swal.fire({
+        title: 'Zmaga🎉',
+        text: 'Pobral si vse banane',
+        icon: 'success',
+        confirmButtonText: 'V redu'
+      });
+    } else {
+      Swal.fire({
+        title: 'Napaka',
+        text: 'Naprej poberi vse banane',
+        icon: 'error',
+        confirmButtonText: 'V redu'
+      });
+    }
+  }
+}
+
+function easeOut(t){ return 1 - (1 - t) * (1 - t); }
+
 function tryMove(dx, dy) {
+  if (moving) return;
+
   const nx = player.x + dx;
   const ny = player.y + dy;
   if (!inBounds(nx, ny)) return;
   if (grid[ny][nx] === WALL) return;
 
-  player = { x: nx, y: ny };
-  moves++;
-  updateHUD();
+  moving = true;
+  playerTarget = { x: nx, y: ny };
 
-  collectIfBanana();
+  const fromX = player.x, fromY = player.y;
+  const t0 = performance.now();
 
-  if (player.x === end.x && player.y === end.y) {
-    if (bananasGot === bananas.length) {
-          Swal.fire({
-              title: 'Zmaga🎉',
-              text: 'Pobral si vse banane',
-              icon: 'success',
-              confirmButtonText: 'V redu'
-          });
+  function anim(t) {
+    const p = Math.min(1, (t - t0) / MOVE_MS);
+    const e = easeOut(p);
+
+    playerRender.x = fromX + (playerTarget.x - fromX) * e;
+    playerRender.y = fromY + (playerTarget.y - fromY) * e;
+
+    draw();
+
+    if (p < 1) {
+      requestAnimationFrame(anim);
     } else {
-          Swal.fire({
-              title: 'Napaka',
-              text: 'Naprej poberi vse banane',
-              icon: 'error',
-              confirmButtonText: 'V redu'
-          });
+      // finalize logical position + collect/win
+      player = { ...playerTarget };
+      playerRender = { ...playerTarget };
+      moves++;
+      updateHUD();
+      collectIfBanana();
+      checkWin();
+      moving = false;
+      draw();
     }
   }
 
-  draw();
+  requestAnimationFrame(anim);
 }
 
 // =====================
@@ -358,6 +395,9 @@ btnNew.addEventListener("click", () => {
 
 btnReset.addEventListener("click", () => {
   player = { ...start };
+  playerRender = { ...start };
+  playerTarget = { ...start };
+  moving = false;
   moves = 0;
   bananasGot = 0;
   bananas.forEach(b => b.got = false);

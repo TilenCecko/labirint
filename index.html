@@ -15,7 +15,14 @@
         <h1>Labirint</h1>
         <p>Za premikanje uporabi puščice na tipkovnici</p>
       </div>
+    </div>
 
+    <div class="labirint">
+      <div id="game" class="game" tabindex="0" aria-label="Labirint">
+        <canvas id="canvas" width="720" height="720"></canvas>
+      </div>
+    </div>
+    <div class="opis">
       <div class="buttons">
         <button id="nov">Nov labirint</button>
         <button id="resi" class="rumen">Prikaži rešitev</button>
@@ -27,12 +34,6 @@
         <div class="zapis" id="koraki">Koraki: 0</div>
       </div>
     </div>
-
-    <main class="labirint">
-      <div id="game" class="game" tabindex="0" aria-label="Labirint">
-        <canvas id="canvas" width="720" height="720"></canvas>
-      </div>
-    </main>
   </div>
 
   <script src="js/script.js"></script>
