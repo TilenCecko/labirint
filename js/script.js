@@ -1,70 +1,7 @@
-// =====================
-// Konfiguracija
-// =====================
 const COLS = 25;
 const ROWS = 25;
 const BANANA_COUNT = 6;
 
-const H_WALL_ROWS = [
-  "1111111111110111111111111",
-  "0111001100100001001110000",
-  "0001001111001011011100000",
-  "0100000101100101011010100",
-  "1110100011111110111111011",
-  "0000110100011100011110100",
-  "1011111001110110100000011",
-  "0001101001101111000010100",
-  "1111110110110011001101110",
-  "0111100001001000101000101",
-  "0011010010110110110011011",
-  "0110111000000101000000010",
-  "1000110011011010100101000",
-  "0101101100000101000010101",
-  "0111010001001011101101110",
-  "0010000110111001110111011",
-  "0100101011110100000001110",
-  "1000010111111011100011001",
-  "0000111001010101000101110",
-  "0111110110100100111011001",
-  "1111001001111011001000110",
-  "0000001000000100010101111",
-  "0010000111011010111010000",
-  "0100001101100111010111010",
-  "0000011111110011000100100",
-  "1111111111110111111111111",
-];
-
-const V_WALL_ROWS = [
-  "10000100100011000100010011",
-  "11001100010110101100011111",
-  "11101110010110100001011111",
-  "10011111100010101000010101",
-  "11010011001000011000000101",
-  "10100010110100010110111011",
-  "11100010100010001011011001",
-  "10010010010010100111010011",
-  "10000011010101101100110101",
-  "11000011101010110011010001",
-  "11001001111011001011101101",
-  "10111000101101010111011101",
-  "10110011010101010110110111",
-  "11000101101110100101101001",
-  "11001111010101100010010001",
-  "11011010100010110110100001",
-  "10111011000001101011100101",
-  "10111000100010010011010101",
-  "11010001011011010110100101",
-  "10000110101001010010110101",
-  "10110101110101011101010001",
-  "11101110101010101010010101",
-  "11011010010101000001001011",
-  "11111100100011000110010111",
-  "10101000000011001010101001",
-];
-
-// =====================
-// DOM
-// =====================
 const gameEl = document.getElementById("game");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -74,12 +11,7 @@ const hudMoves = document.getElementById("koraki");
 
 const btnNew = document.getElementById("nov");
 const btnReset = document.getElementById("reset");
-
-// =====================
-// Stanje igre
-// =====================
-const hWalls = H_WALL_ROWS.map((row) => [...row].map((cell) => cell === "1"));
-const vWalls = V_WALL_ROWS.map((row) => [...row].map((cell) => cell === "1"));
+const vizitka = document.getElementById("vizitka");
 
 const start = { x: 12, y: 0 };
 const end = { x: 12, y: ROWS - 1 };
@@ -96,9 +28,6 @@ let moves = 0;
 let cw = 720;
 let ch = 720;
 
-// =====================
-// Pomozne funkcije
-// =====================
 function inBounds(x, y) {
   return x >= 0 && y >= 0 && x < COLS && y < ROWS;
 }
@@ -120,17 +49,6 @@ function updateHUD() {
   hudMoves.textContent = `Koraki: ${moves}`;
 }
 
-function hasWallBetween(x, y, dx, dy) {
-  if (dx === 1) return vWalls[y][x + 1];
-  if (dx === -1) return vWalls[y][x];
-  if (dy === 1) return hWalls[y + 1][x];
-  if (dy === -1) return hWalls[y][x];
-  return true;
-}
-
-// =====================
-// Igra
-// =====================
 function resetPlayerState() {
   player = { ...start };
   playerRender = { ...start };
@@ -175,9 +93,6 @@ function collectIfBanana() {
   }
 }
 
-// =====================
-// Render
-// =====================
 function drawWalls(cell, offsetX, offsetY) {
   const scale = cell / 16;
 
@@ -824,14 +739,17 @@ function draw() {
   ctx.fillStyle = "rgba(239, 68, 68, 0.32)";
   ctx.fillRect(offsetX + end.x * cell, offsetY + end.y * cell, cell, cell);
 
+  // najprej narišemo zidove
   drawWalls(cell, offsetX, offsetY);
 
+  // banane
   for (const b of bananas) {
     if (!b.got) {
       drawEmoji("🍌", b.x, b.y, cell, offsetX, offsetY);
     }
   }
 
+  // igralec in cilj
   drawEmoji("🐵", playerRender.x, playerRender.y, cell, offsetX, offsetY);
   drawEmoji("🎯", end.x, end.y, cell, offsetX, offsetY);
 }
@@ -846,9 +764,6 @@ function drawEmoji(emoji, x, y, cell, offsetX, offsetY) {
   ctx.fillText(emoji, cxp, cyp);
 }
 
-// =====================
-// Gameplay
-// =====================
 function showMessage(title, text, icon) {
   if (typeof Swal !== "undefined") {
     Swal.fire({ title, text, icon, confirmButtonText: "V redu" });
@@ -871,12 +786,61 @@ function easeOut(t) {
   return 1 - (1 - t) * (1 - t);
 }
 
+function hasWallBetween(x, y, dx, dy) {
+  const size = Math.min(cw, ch);
+  const cell = size / COLS;
+  const mazeWidth = COLS * cell;
+  const mazeHeight = ROWS * cell;
+  const offsetX = (cw - mazeWidth) / 2;
+  const offsetY = (ch - mazeHeight) / 2;
+
+  // vzamemo točko na robu med celicama
+  let sx, sy;
+
+  if (dx === 1 && dy === 0) {
+    // desno
+    sx = offsetX + (x + 1) * cell;
+    sy = offsetY + y * cell + cell / 2;
+  } else if (dx === -1 && dy === 0) {
+    // levo
+    sx = offsetX + x * cell;
+    sy = offsetY + y * cell + cell / 2;
+  } else if (dx === 0 && dy === 1) {
+    // dol
+    sx = offsetX + x * cell + cell / 2;
+    sy = offsetY + (y + 1) * cell;
+  } else if (dx === 0 && dy === -1) {
+    // gor
+    sx = offsetX + x * cell + cell / 2;
+    sy = offsetY + y * cell;
+  } else {
+    return true;
+  }
+
+  // preberemo piksel
+  const pixel = ctx.getImageData(Math.round(sx), Math.round(sy), 1, 1).data;
+  const r = pixel[0];
+  const g = pixel[1];
+  const b = pixel[2];
+  const a = pixel[3];
+
+  const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+
+  if (a > 0 && brightness < 40) {
+    return true; // tu je zid
+  }
+
+  return false;
+}
+
 function tryMove(dx, dy) {
   if (moving) return;
 
   const nx = player.x + dx;
   const ny = player.y + dy;
   if (!inBounds(nx, ny)) return;
+
+  // zdaj gledamo canvas
   if (hasWallBetween(player.x, player.y, dx, dy)) return;
 
   moving = true;
@@ -913,9 +877,6 @@ function tryMove(dx, dy) {
   requestAnimationFrame(anim);
 }
 
-// =====================
-// Controls
-// =====================
 function onKey(e) {
   e.stopPropagation();
   const keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
@@ -934,6 +895,10 @@ btnNew.addEventListener("click", () => {
   gameEl.focus();
 });
 
+vizitka.addEventListener("click", () => {
+  showMessage("Avtor", "Tilen Čečko", "info");
+});
+
 btnReset.addEventListener("click", () => {
   resetPlayerState();
   bananasGot = 0;
@@ -948,9 +913,6 @@ btnReset.addEventListener("click", () => {
 window.addEventListener("keydown", onKey);
 gameEl.addEventListener("click", () => gameEl.focus());
 
-// =====================
-// DPR / Resize
-// =====================
 function fitCanvasToDisplay() {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
