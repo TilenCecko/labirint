@@ -46,7 +46,6 @@ body {
 
 .naslov p {
     margin: 6px 0 0;
-    opacity: .9;
     font-size: 14px;
 }
 
@@ -74,7 +73,7 @@ button {
 
 .siv {
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, .25);
+    border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 .hud {
@@ -94,11 +93,7 @@ button {
 
 .labirint {
     width: 55vh;
-    aspect-ratio: 1 / 1;
     border-radius: 14px;
-    overflow: hidden;
-    outline: none;
-    border: 1px solid rgba(255, 255, 255, .15);
 }
 
 canvas {
