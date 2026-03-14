@@ -1,7 +1,3 @@
-const COLS = 25;
-const ROWS = 25;
-const BANANA_COUNT = 6;
-
 const gameEl = document.getElementById("game");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -13,92 +9,62 @@ const btnNew = document.getElementById("nov");
 const btnReset = document.getElementById("reset");
 const vizitka = document.getElementById("vizitka");
 
-const start = { x: 12, y: 0 };
-const end = { x: 12, y: ROWS - 1 };
+const MAZE_SIZE = 404;
+const BANANA_COUNT = 6;
+const PLAYER_RADIUS = 4;
+const PLAYER_SPEED = 110;
+const START = { x: 202, y: 10 };
+const GOAL = { x: 202, y: 394 };
 
-let player = { ...start };
-let playerRender = { ...start };
-let playerTarget = { ...start };
-let moving = false;
-const MOVE_MS = 140;
-let bananas = [];
-let bananasGot = 0;
-let moves = 0;
+const hitCanvas = document.createElement("canvas");
+const hitCtx = hitCanvas.getContext("2d", { willReadFrequently: true });
+
+const keys = {
+  ArrowUp: false,
+  ArrowDown: false,
+  ArrowLeft: false,
+  ArrowRight: false,
+};
 
 let cw = 720;
 let ch = 720;
+let viewSize = 720;
+let offsetX = 0;
+let offsetY = 0;
+let scale = 1;
+let player = { ...START };
+let bananas = [];
+let bananasGot = 0;
+let lastTime = 0;
 
-function inBounds(x, y) {
-  return x >= 0 && y >= 0 && x < COLS && y < ROWS;
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+
+  cw = rect.width;
+  ch = rect.height;
+  canvas.width = Math.round(cw * dpr);
+  canvas.height = Math.round(ch * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  viewSize = Math.min(cw, ch);
+  offsetX = (cw - viewSize) / 2;
+  offsetY = (ch - viewSize) / 2;
+  scale = viewSize / MAZE_SIZE;
 }
 
-function key(x, y) {
-  return `${x},${y}`;
+function screenX(x) {
+  return offsetX + x * scale;
 }
 
-function shuffle(a) {
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+function screenY(y) {
+  return offsetY + y * scale;
 }
 
-function updateHUD() {
-  hudBananas.textContent = `🍌 ${bananasGot}/${bananas.length}`;
-  hudMoves.textContent = `Koraki: ${moves}`;
-}
-
-function resetPlayerState() {
-  player = { ...start };
-  playerRender = { ...start };
-  playerTarget = { ...start };
-  moving = false;
-  moves = 0;
-}
-
-function newGame() {
-  resetPlayerState();
-  spawnBananas(BANANA_COUNT);
-  bananasGot = 0;
-  updateHUD();
-}
-
-function spawnBananas(count) {
-  bananas = [];
-  const taken = new Set([key(start.x, start.y), key(end.x, end.y)]);
-
-  const cells = [];
-  for (let y = 0; y < ROWS; y++) {
-    for (let x = 0; x < COLS; x++) {
-      const cellKey = key(x, y);
-      if (!taken.has(cellKey)) {
-        cells.push({ x, y });
-      }
-    }
-  }
-
-  shuffle(cells);
-  bananas = cells.slice(0, count).map(({ x, y }) => ({ x, y, got: false }));
-}
-
-function collectIfBanana() {
-  for (const b of bananas) {
-    if (!b.got && b.x === player.x && b.y === player.y) {
-      b.got = true;
-      bananasGot++;
-      updateHUD();
-      return;
-    }
-  }
-}
-
-function drawWalls(cell, offsetX, offsetY) {
-  const scale = cell / 16;
-
+function drawWalls(ctx, wallScale, wallOffsetX, wallOffsetY) {
   ctx.save();
-  ctx.translate(offsetX - 2 * scale, offsetY - 2 * scale);
-  ctx.scale(scale, scale);
+  ctx.translate(wallOffsetX, wallOffsetY);
+  ctx.scale(wallScale, wallScale);
   ctx.strokeStyle = "rgba(12, 24, 18, 0.98)";
   ctx.lineWidth = 2;
   ctx.lineCap = "square";
@@ -717,14 +683,45 @@ function drawWalls(cell, offsetX, offsetY) {
   ctx.restore();
 }
 
-function draw() {
-  const size = Math.min(cw, ch);
-  const cell = size / COLS;
-  const mazeWidth = COLS * cell;
-  const mazeHeight = ROWS * cell;
-  const offsetX = (cw - mazeWidth) / 2;
-  const offsetY = (ch - mazeHeight) / 2;
+function buildHitMap() {
+  hitCanvas.width = MAZE_SIZE;
+  hitCanvas.height = MAZE_SIZE;
+  hitCtx.clearRect(0, 0, MAZE_SIZE, MAZE_SIZE);
+  drawWalls(hitCtx, 1, 0, 0);
+}
 
+function drawPlayer() {
+  ctx.font = `${Math.max(14, viewSize * 0.032)}px system-ui`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#fff";
+  ctx.fillText("🐵", screenX(player.x), screenY(player.y));
+}
+
+function drawBananas() {
+  ctx.font = `${Math.max(14, viewSize * 0.032)}px system-ui`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#fff";
+
+  for (const banana of bananas) {
+    if (!banana.got) {
+      ctx.fillText("🍌", screenX(banana.x), screenY(banana.y));
+    }
+  }
+}
+
+function drawGoal() {
+  ctx.fillStyle = "rgba(239, 68, 68, 0.25)";
+  ctx.beginPath();
+  ctx.font = `${Math.max(16, viewSize * 0.04)}px system-ui`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#fff";
+  ctx.fillText("🎯", screenX(GOAL.x), screenY(GOAL.y));
+}
+
+function drawScene() {
   ctx.clearRect(0, 0, cw, ch);
 
   const bg = ctx.createLinearGradient(0, 0, cw, ch);
@@ -734,208 +731,168 @@ function draw() {
   ctx.fillRect(0, 0, cw, ch);
 
   ctx.fillStyle = "rgba(98, 149, 114, 0.16)";
-  ctx.fillRect(offsetX, offsetY, mazeWidth, mazeHeight);
+  ctx.fillRect(offsetX, offsetY, viewSize, viewSize);
 
-  ctx.fillStyle = "rgba(239, 68, 68, 0.32)";
-  ctx.fillRect(offsetX + end.x * cell, offsetY + end.y * cell, cell, cell);
+  drawWalls(ctx, scale, offsetX, offsetY);
+  drawBananas();
+  drawGoal();
+  drawPlayer();
+}
 
-  // najprej narišemo zidove
-  drawWalls(cell, offsetX, offsetY);
+function canMoveTo(x, y) {
+  const points = [
+    [0, 0],
+    [PLAYER_RADIUS, 0],
+    [-PLAYER_RADIUS, 0],
+    [0, PLAYER_RADIUS],
+    [0, -PLAYER_RADIUS],
+    [PLAYER_RADIUS * 0.7, PLAYER_RADIUS * 0.7],
+    [PLAYER_RADIUS * 0.7, -PLAYER_RADIUS * 0.7],
+    [-PLAYER_RADIUS * 0.7, PLAYER_RADIUS * 0.7],
+    [-PLAYER_RADIUS * 0.7, -PLAYER_RADIUS * 0.7],
+  ];
 
-  // banane
-  for (const b of bananas) {
-    if (!b.got) {
-      drawEmoji("🍌", b.x, b.y, cell, offsetX, offsetY);
+  for (const [dx, dy] of points) {
+    const sx = Math.round(x + dx);
+    const sy = Math.round(y + dy);
+    if (sx < 0 || sy < 0 || sx >= MAZE_SIZE || sy >= MAZE_SIZE) return false;
+
+    const pixel = hitCtx.getImageData(sx, sy, 1, 1).data;
+    const brightness = pixel[0] + pixel[1] + pixel[2];
+    if (pixel[3] > 0 && brightness < 120) return false;
+  }
+
+  return true;
+}
+
+function updateHud() {
+  hudBananas.textContent = `🍌 ${bananasGot}/${bananas.length}`;
+}
+
+function randomFreePoint() {
+  for (let i = 0; i < 2000; i++) {
+    const x = 20 + Math.random() * (MAZE_SIZE - 40);
+    const y = 20 + Math.random() * (MAZE_SIZE - 40);
+    if (!canMoveTo(x, y)) continue;
+    if (Math.hypot(x - START.x, y - START.y) < 24) continue;
+    if (Math.hypot(x - GOAL.x, y - GOAL.y) < 24) continue;
+    if (bananas.some((banana) => Math.hypot(x - banana.x, y - banana.y) < 24)) continue;
+    return { x, y, got: false };
+  }
+
+  return { x: START.x, y: START.y + 24, got: false };
+}
+
+function spawnBananas() {
+  bananas = [];
+  for (let i = 0; i < BANANA_COUNT; i++) {
+    bananas.push(randomFreePoint());
+  }
+  bananasGot = 0;
+}
+
+function collectBananas() {
+  for (const banana of bananas) {
+    if (banana.got) continue;
+    if (Math.hypot(player.x - banana.x, player.y - banana.y) < 14) {
+      banana.got = true;
+      bananasGot++;
     }
   }
-
-  // igralec in cilj
-  drawEmoji("🐵", playerRender.x, playerRender.y, cell, offsetX, offsetY);
-  drawEmoji("🎯", end.x, end.y, cell, offsetX, offsetY);
 }
 
-function drawEmoji(emoji, x, y, cell, offsetX, offsetY) {
-  const cxp = offsetX + x * cell + cell / 2;
-  const cyp = offsetY + y * cell + cell / 2;
-  ctx.font = `${Math.floor(cell * 0.7)}px system-ui`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = "#fff";
-  ctx.fillText(emoji, cxp, cyp);
+function resetPlayer() {
+  player = { ...START };
+  updateHud();
+  drawScene();
 }
 
-function showMessage(title, text, icon) {
-  if (typeof Swal !== "undefined") {
-    Swal.fire({ title, text, icon, confirmButtonText: "V redu" });
-    return;
-  }
-  window.alert(`${title}\n\n${text}`);
+function resetGame() {
+  spawnBananas();
+  resetPlayer();
 }
 
 function checkWin() {
-  if (player.x === end.x && player.y === end.y) {
-    if (bananasGot === bananas.length) {
-      showMessage("Zmaga 🎉", "Pobral si vse banane.", "success");
-    } else {
-      showMessage("Napaka", "Naprej poberi vse banane.", "error");
-    }
+  if (Math.hypot(player.x - GOAL.x, player.y - GOAL.y) < 16) {
+    hudBananas.textContent = bananasGot === bananas.length ? "Vse banane pobrane" : "Poberi vse banane";
   }
 }
 
-function easeOut(t) {
-  return 1 - (1 - t) * (1 - t);
-}
+function movePlayer(dt) {
+  let dx = 0;
+  let dy = 0;
 
-function hasWallBetween(x, y, dx, dy) {
-  const size = Math.min(cw, ch);
-  const cell = size / COLS;
-  const mazeWidth = COLS * cell;
-  const mazeHeight = ROWS * cell;
-  const offsetX = (cw - mazeWidth) / 2;
-  const offsetY = (ch - mazeHeight) / 2;
+  if (keys.ArrowUp) dy -= 1;
+  if (keys.ArrowDown) dy += 1;
+  if (keys.ArrowLeft) dx -= 1;
+  if (keys.ArrowRight) dx += 1;
+  if (!dx && !dy) return;
 
-  // vzamemo točko na robu med celicama
-  let sx, sy;
+  const length = Math.hypot(dx, dy);
+  const stepX = (dx / length) * PLAYER_SPEED * dt;
+  const stepY = (dy / length) * PLAYER_SPEED * dt;
 
-  if (dx === 1 && dy === 0) {
-    // desno
-    sx = offsetX + (x + 1) * cell;
-    sy = offsetY + y * cell + cell / 2;
-  } else if (dx === -1 && dy === 0) {
-    // levo
-    sx = offsetX + x * cell;
-    sy = offsetY + y * cell + cell / 2;
-  } else if (dx === 0 && dy === 1) {
-    // dol
-    sx = offsetX + x * cell + cell / 2;
-    sy = offsetY + (y + 1) * cell;
-  } else if (dx === 0 && dy === -1) {
-    // gor
-    sx = offsetX + x * cell + cell / 2;
-    sy = offsetY + y * cell;
-  } else {
-    return true;
+  const nextX = player.x + stepX;
+  const nextY = player.y + stepY;
+
+  if (canMoveTo(nextX, player.y)) {
+    player.x = nextX;
+  }
+  if (canMoveTo(player.x, nextY)) {
+    player.y = nextY;
   }
 
-  // preberemo piksel
-  const pixel = ctx.getImageData(Math.round(sx), Math.round(sy), 1, 1).data;
-  const r = pixel[0];
-  const g = pixel[1];
-  const b = pixel[2];
-  const a = pixel[3];
-
-  const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
-
-  if (a > 0 && brightness < 40) {
-    return true; // tu je zid
-  }
-
-  return false;
+  collectBananas();
+  updateHud();
+  checkWin();
 }
 
-function tryMove(dx, dy) {
-  if (moving) return;
+function frame(time) {
+  if (!lastTime) lastTime = time;
+  const dt = Math.min(0.03, (time - lastTime) / 1000);
+  lastTime = time;
 
-  const nx = player.x + dx;
-  const ny = player.y + dy;
-  if (!inBounds(nx, ny)) return;
-
-  // zdaj gledamo canvas
-  if (hasWallBetween(player.x, player.y, dx, dy)) return;
-
-  moving = true;
-  playerTarget = { x: nx, y: ny };
-
-  const fromX = player.x;
-  const fromY = player.y;
-  const t0 = performance.now();
-
-  function anim(t) {
-    const p = Math.min(1, (t - t0) / MOVE_MS);
-    const e = easeOut(p);
-
-    playerRender.x = fromX + (playerTarget.x - fromX) * e;
-    playerRender.y = fromY + (playerTarget.y - fromY) * e;
-
-    draw();
-
-    if (p < 1) {
-      requestAnimationFrame(anim);
-      return;
-    }
-
-    player = { ...playerTarget };
-    playerRender = { ...playerTarget };
-    moves++;
-    updateHUD();
-    collectIfBanana();
-    checkWin();
-    moving = false;
-    draw();
-  }
-
-  requestAnimationFrame(anim);
+  movePlayer(dt);
+  drawScene();
+  requestAnimationFrame(frame);
 }
 
-function onKey(e) {
-  e.stopPropagation();
-  const keys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
-  if (!keys.includes(e.key)) return;
-  e.preventDefault();
-
-  if (e.key === "ArrowUp") tryMove(0, -1);
-  if (e.key === "ArrowDown") tryMove(0, 1);
-  if (e.key === "ArrowLeft") tryMove(-1, 0);
-  if (e.key === "ArrowRight") tryMove(1, 0);
-}
-
-btnNew.addEventListener("click", () => {
-  newGame();
-  draw();
-  gameEl.focus();
+window.addEventListener("keydown", (event) => {
+  if (!(event.key in keys)) return;
+  event.preventDefault();
+  keys[event.key] = true;
 });
 
-vizitka.addEventListener("click", () => {
-  showMessage("Avtor", "Tilen Čečko", "info");
+window.addEventListener("keyup", (event) => {
+  if (!(event.key in keys)) return;
+  keys[event.key] = false;
 });
-
-btnReset.addEventListener("click", () => {
-  resetPlayerState();
-  bananasGot = 0;
-  bananas.forEach((b) => {
-    b.got = false;
-  });
-  updateHUD();
-  draw();
-  gameEl.focus();
-});
-
-window.addEventListener("keydown", onKey);
-gameEl.addEventListener("click", () => gameEl.focus());
-
-function fitCanvasToDisplay() {
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-
-  cw = rect.width;
-  ch = rect.height;
-
-  canvas.width = Math.round(cw * dpr);
-  canvas.height = Math.round(ch * dpr);
-
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-
-function boot() {
-  fitCanvasToDisplay();
-  newGame();
-  draw();
-  gameEl.focus();
-}
 
 window.addEventListener("resize", () => {
-  fitCanvasToDisplay();
-  draw();
+  resizeCanvas();
+  drawScene();
 });
+
+btnNew.addEventListener("click", resetGame);
+btnReset.addEventListener("click", resetPlayer);
+
+vizitka.addEventListener("click", () => {
+      Swal.fire({
+        title: 'Avtor',
+        text: 'Tilen Čečko',
+        icon: 'info',
+        confirmButtonText: 'V redu'
+    });
+});
+
+gameEl.addEventListener("click", () => gameEl.focus());
+
+function boot() {
+  resizeCanvas();
+  buildHitMap();
+  resetGame();
+  gameEl.focus();
+  requestAnimationFrame(frame);
+}
 
 boot();
