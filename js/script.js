@@ -11,14 +11,17 @@ const vizitka = document.getElementById("vizitka");
 
 const MAZE_SIZE = 404;
 const BANANA_COUNT = 6;
+const MOVING_BANANA_COUNT = 2;
 const PLAYER_RADIUS = 4;
 const PLAYER_SPEED = 110;
+const MOVING_BANANA_SPEED = 34;
 const START = { x: 202, y: 10 };
 const GOAL = { x: 202, y: 394 };
 
 const hitCanvas = document.createElement("canvas");
 const hitCtx = hitCanvas.getContext("2d", { willReadFrequently: true });
 
+// Shranjujemo stanje tipk, da lahko igralca premikamo gladko v vsaki animacijski sličici.
 const keys = {
   ArrowUp: false,
   ArrowDown: false,
@@ -37,6 +40,7 @@ let bananas = [];
 let bananasGot = 0;
 let lastTime = 0;
 
+// canvas prilagodimo velikosti elementa in izračunamo merilo za pretvorbo koordinat labirinta na zaslon.
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -61,6 +65,7 @@ function screenY(y) {
   return offsetY + y * scale;
 }
 
+// narisana celotna oblika labirinta: vse vodoravne in navpične stene.
 function drawWalls(ctx, wallScale, wallOffsetX, wallOffsetY) {
   ctx.save();
   ctx.translate(wallOffsetX, wallOffsetY);
@@ -687,9 +692,11 @@ function buildHitMap() {
   hitCanvas.width = MAZE_SIZE;
   hitCanvas.height = MAZE_SIZE;
   hitCtx.clearRect(0, 0, MAZE_SIZE, MAZE_SIZE);
+  // Labirint narišemo še na platno, da lahko preverjamo trke z zidovi.
   drawWalls(hitCtx, 1, 0, 0);
 }
 
+// risanje igralca
 function drawPlayer() {
   ctx.font = `${Math.max(14, viewSize * 0.032)}px system-ui`;
   ctx.textAlign = "center";
@@ -711,6 +718,7 @@ function drawBananas() {
   }
 }
 
+// 
 function drawGoal() {
   ctx.fillStyle = "rgba(239, 68, 68, 0.25)";
   ctx.beginPath();
@@ -739,6 +747,7 @@ function drawScene() {
   drawPlayer();
 }
 
+// Preveri, ali se igralec lahko postavi na dano točko brez dotika z zidom.
 function canMoveTo(x, y) {
   const points = [
     [0, 0],
@@ -769,6 +778,7 @@ function updateHud() {
   hudBananas.textContent = `🍌 ${bananasGot}/${bananas.length}`;
 }
 
+// Poišče naključno prosto točko v labirintu, ki ni preblizu starta, cilja ali drugih banan.
 function randomFreePoint() {
   for (let i = 0; i < 2000; i++) {
     const x = 20 + Math.random() * (MAZE_SIZE - 40);
@@ -783,14 +793,65 @@ function randomFreePoint() {
   return { x: START.x, y: START.y + 24, got: false };
 }
 
+// Ustvari banano, ki se bo premikala po osi y ne glede na zidove.
+function randomMovingBananaPoint() {
+  const margin = 10;
+
+  for (let i = 0; i < 2000; i++) {
+    const banana = randomFreePoint();
+
+    banana.moving = true;
+    banana.minY = margin;
+    banana.maxY = MAZE_SIZE - margin;
+    banana.direction = Math.random() < 0.5 ? -1 : 1;
+    banana.speed = MOVING_BANANA_SPEED;
+    return banana;
+  }
+
+  return {
+    ...randomFreePoint(),
+    moving: false,
+  };
+}
+
+// Ob novi igri ustvarimo 2 premikajoči banani in ostale navadne.
 function spawnBananas() {
   bananas = [];
-  for (let i = 0; i < BANANA_COUNT; i++) {
+  for (let i = 0; i < MOVING_BANANA_COUNT; i++) {
+    bananas.push(randomMovingBananaPoint());
+  }
+
+  for (let i = MOVING_BANANA_COUNT; i < BANANA_COUNT; i++) {
     bananas.push(randomFreePoint());
   }
+
   bananasGot = 0;
 }
 
+// V vsakem frame-u premaknemo banane
+function updateBananas(dt) {
+  for (const banana of bananas) {
+    if (banana.got || !banana.moving) continue;
+
+    const nextY = banana.y + banana.direction * banana.speed * dt;
+
+    if (nextY <= banana.minY) {
+      banana.y = banana.minY;
+      banana.direction = 1;
+      continue;
+    }
+
+    if (nextY >= banana.maxY) {
+      banana.y = banana.maxY;
+      banana.direction = -1;
+      continue;
+    }
+
+    banana.y = nextY;
+  }
+}
+
+// Če je igralec dovolj blizu banane, jo označimo kot pobrano.
 function collectBananas() {
   for (const banana of bananas) {
     if (banana.got) continue;
@@ -807,17 +868,20 @@ function resetPlayer() {
   drawScene();
 }
 
+// Popoln reset igre: nove banane in igralec nazaj na začetek.
 function resetGame() {
   spawnBananas();
   resetPlayer();
 }
 
+// Ob prihodu do cilja preverimo, ali so vse banane res pobrane.
 function checkWin() {
   if (Math.hypot(player.x - GOAL.x, player.y - GOAL.y) < 16) {
     hudBananas.textContent = bananasGot === bananas.length ? "Vse banane pobrane" : "Poberi vse banane";
   }
 }
 
+// Iz smeri tipk izračunamo premik igralca in ga dovolimo samo skozi proste poti.
 function movePlayer(dt) {
   let dx = 0;
   let dy = 0;
@@ -847,11 +911,13 @@ function movePlayer(dt) {
   checkWin();
 }
 
+// Glavna animacijska zanka: posodobi banane, igralca in nato še izriše sceno.
 function frame(time) {
   if (!lastTime) lastTime = time;
   const dt = Math.min(0.03, (time - lastTime) / 1000);
   lastTime = time;
 
+  updateBananas(dt);
   movePlayer(dt);
   drawScene();
   requestAnimationFrame(frame);
@@ -887,6 +953,7 @@ vizitka.addEventListener("click", () => {
 
 gameEl.addEventListener("click", () => gameEl.focus());
 
+// Začetna nastavitev igre ob nalaganju strani.
 function boot() {
   resizeCanvas();
   buildHitMap();
