@@ -25,7 +25,7 @@ body {
 }
 
 .opis {
-    width: 35vh;
+    width: 50vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
