@@ -39,6 +39,7 @@ let player = { ...START };
 let bananas = [];
 let bananasGot = 0;
 let lastTime = 0;
+let goalAlertShown = false;
 
 // canvas prilagodimo velikosti elementa in izračunamo merilo za pretvorbo koordinat labirinta na zaslon.
 function resizeCanvas() {
@@ -864,6 +865,7 @@ function collectBananas() {
 
 function resetPlayer() {
   player = { ...START };
+  goalAlertShown = false;
   updateHud();
   drawScene();
 }
@@ -876,8 +878,21 @@ function resetGame() {
 
 // Ob prihodu do cilja preverimo, ali so vse banane res pobrane.
 function checkWin() {
-  if (Math.hypot(player.x - GOAL.x, player.y - GOAL.y) < 16) {
-    hudBananas.textContent = bananasGot === bananas.length ? "Vse banane pobrane" : "Poberi vse banane";
+  const atGoal = Math.hypot(player.x - GOAL.x, player.y - GOAL.y) < 16;
+
+  if (!atGoal) {
+    goalAlertShown = false;
+    return;
+  }
+  if (!goalAlertShown) {
+    Swal.fire({
+      title: bananasGot === bananas.length ? 'Zmaga!' : 'Še malo!',
+      text: bananasGot === bananas.length ? 'Pobral si vse banane in prišel do cilja.' : 'Pred ciljem moraš pobrati vse banane.',
+      icon: bananasGot === bananas.length ? 'success' : 'warning',
+      confirmButtonText: 'V redu'
+    });
+
+    goalAlertShown = true;
   }
 }
 
