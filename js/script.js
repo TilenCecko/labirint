@@ -14,7 +14,7 @@ const BANANA_COUNT = 6;
 const MOVING_BANANA_COUNT = 2;
 const PLAYER_RADIUS = 4;
 const PLAYER_SPEED = 110;
-const MOVING_BANANA_SPEED = 34;
+const MOVING_BANANA_SPEED = 30;
 const START = { x: 202, y: 10 };
 const GOAL = { x: 202, y: 394 };
 
@@ -798,8 +798,7 @@ function randomFreePoint() {
 function randomMovingBananaPoint() {
   const margin = 10;
 
-  for (let i = 0; i < 2000; i++) {
-    const banana = randomFreePoint();
+  const banana = randomFreePoint();
 
     banana.moving = true;
     banana.minY = margin;
@@ -807,15 +806,9 @@ function randomMovingBananaPoint() {
     banana.direction = Math.random() < 0.5 ? -1 : 1;
     banana.speed = MOVING_BANANA_SPEED;
     return banana;
-  }
-
-  return {
-    ...randomFreePoint(),
-    moving: false,
-  };
 }
 
-// Ob novi igri ustvarimo 2 premikajoči banani in ostale navadne.
+// Ob novi igri ustvarimo premikajoče banane
 function spawnBananas() {
   bananas = [];
   for (let i = 0; i < MOVING_BANANA_COUNT; i++) {

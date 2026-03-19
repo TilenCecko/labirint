@@ -15,6 +15,11 @@ body {
     background-size: cover;
 }
 
+@font-face {
+  font-family: pisava;
+  src: url(../fonts/Jungle\ Roar\ Bold.ttf);
+}
+
 .main {
     height: 100vh;
     padding: 18px;
@@ -39,9 +44,10 @@ body {
 }
 
 .naslov h1 {
+    font-family: pisava;
     text-align: center;
     margin: 0;
-    font-size: 22px;
+    font-size: 40px;
 }
 
 .naslov p {
