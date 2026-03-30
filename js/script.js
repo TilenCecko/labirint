@@ -787,7 +787,7 @@ function randomFreePoint() {
     if (!canMoveTo(x, y)) continue;
     if (Math.hypot(x - START.x, y - START.y) < 24) continue;
     if (Math.hypot(x - GOAL.x, y - GOAL.y) < 24) continue;
-    if (bananas.some((banana) => Math.hypot(x - banana.x, y - banana.y) < 24)) continue;
+    if (bananas.some(function (banana) { return Math.hypot(x - banana.x, y - banana.y) < 24; })) continue;
     return { x, y, got: false };
   }
 
@@ -931,18 +931,18 @@ function frame(time) {
   requestAnimationFrame(frame);
 }
 
-window.addEventListener("keydown", (event) => {
+window.addEventListener("keydown", function (event) {
   if (!(event.key in keys)) return;
   event.preventDefault();
   keys[event.key] = true;
 });
 
-window.addEventListener("keyup", (event) => {
+window.addEventListener("keyup", function (event) {
   if (!(event.key in keys)) return;
   keys[event.key] = false;
 });
 
-window.addEventListener("resize", () => {
+window.addEventListener("resize", function () {
   resizeCanvas();
   drawScene();
 });
@@ -950,7 +950,7 @@ window.addEventListener("resize", () => {
 btnNew.addEventListener("click", resetGame);
 btnReset.addEventListener("click", resetPlayer);
 
-vizitka.addEventListener("click", () => {
+vizitka.addEventListener("click", function () {
       Swal.fire({
         title: 'Avtor',
         text: 'Tilen Čečko',
@@ -959,7 +959,9 @@ vizitka.addEventListener("click", () => {
     });
 });
 
-gameEl.addEventListener("click", () => gameEl.focus());
+gameEl.addEventListener("click", function () {
+  gameEl.focus();
+});
 
 // Začetna nastavitev igre ob nalaganju strani.
 function boot() {
